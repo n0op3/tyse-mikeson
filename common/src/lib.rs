@@ -3,13 +3,10 @@ use sysinfo::System;
 
 #[derive(Debug, Encode, Decode)]
 pub enum Packet {
-    Beacon {
-        timestamp: u128,
-        system_info: SystemInfo,
-    },
+    Beacon { system_info: SystemInfo },
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct SystemInfo {
     memory: u64,
     name: String,
