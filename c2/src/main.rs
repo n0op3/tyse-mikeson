@@ -1,5 +1,8 @@
 use std::{io::Read, net::TcpListener};
 
+use bincode::config;
+use common::Packet;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
 
@@ -10,7 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         stream.read(&mut buf).expect("failed to read from stream");
 
-        println!("{}", String::from_utf8_lossy(&buf));
+        let (decoded, _len): (Packet, usize) =
+            bincode::decode_from_slice(&buf, config::standard())?;
+
+        println!("{decoded:?}");
     }
 
     Ok(())
