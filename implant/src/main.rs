@@ -1,7 +1,6 @@
 use std::{io::Write, net::TcpStream};
 
-use bincode::config;
-use common::{Packet, SystemInfo};
+use common::{Packet, SystemInfo, encode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut connection = TcpStream::connect("127.0.0.1:9120")?;
@@ -10,11 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         system_info: SystemInfo::get(),
     };
 
-    connection.write(
-        bincode::encode_to_vec(packet, config::standard())
-            .unwrap()
-            .as_slice(),
-    )?;
+    connection.write(encode(&packet).unwrap().as_slice())?;
 
     Ok(())
 }
