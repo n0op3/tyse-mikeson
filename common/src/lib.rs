@@ -3,7 +3,12 @@ use std::ops::Range;
 use bincode::{Decode, Encode, config};
 use sysinfo::System;
 
-pub const IMPLANT_REPORT_RATE_SECONDS: Range<u64> = 60 * 5..60 * 5;
+pub const IMPLANT_REPORT_RATE_SECONDS: Range<u64> = if cfg!(debug_assertions) {
+    1..10
+} else {
+    60 * 5..60 * 5
+};
+
 pub const MAX_PACKET_SIZE_BYTES: usize = 1024;
 
 #[derive(Debug, Encode, Decode)]

