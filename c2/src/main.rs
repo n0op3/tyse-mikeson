@@ -6,9 +6,7 @@ use std::{
 };
 
 use bincode::config;
-use common::{Packet, SystemInfo};
-
-const IMPLANT_TIMEOUT_SECONDS: u64 = 60 * 60; // an hour
+use common::{IMPLANT_TIMEOUT_SECONDS, Packet, SystemInfo};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
