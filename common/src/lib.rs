@@ -1,4 +1,4 @@
-use std::{ops::Range, time::SystemTime};
+use std::{io::Read, net::TcpStream, ops::Range, time::SystemTime};
 
 use bincode::{Decode, Encode, config};
 use sysinfo::System;
@@ -41,6 +41,13 @@ impl Implant {
 pub enum PacketSerializationError {
     PacketTooLong,
     EncodingError(bincode::error::EncodeError),
+}
+
+pub fn read_packet(connection: &mut TcpStream) -> Result<Packet, PacketDeserializationError> {
+    let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
+    connection.read(&mut buf).unwrap();
+
+    decode(&buf)
 }
 
 pub fn encode(packet: Packet) -> Result<Vec<u8>, PacketSerializationError> {
