@@ -64,10 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn run_admin_command(
     stream: &mut TcpStream,
-    decoded: &Packet,
+    packet: &Packet,
     implants: &mut HashMap<IpAddr, Implant>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match decoded {
+    match packet {
         Packet::ImplantListRequest => {
             remove_old_implants(implants);
 

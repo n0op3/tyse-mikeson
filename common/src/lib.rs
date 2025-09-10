@@ -85,11 +85,11 @@ pub fn decode(bytes: &Vec<u8>) -> Result<Packet, PacketDeserializationError> {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct SystemInfo {
-    memory_gb: u64,
-    name: String,
-    kernel: String,
-    os_version: String,
-    hostname: String,
+    pub memory_gb: u64,
+    pub name: String,
+    pub kernel: String,
+    pub os_version: String,
+    pub hostname: String,
 }
 
 impl SystemInfo {
