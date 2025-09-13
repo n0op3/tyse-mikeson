@@ -41,7 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .as_slice(),
         )?;
 
-        let packet = read_packet(&mut connection).unwrap();
+        let packet = match read_packet(&mut connection) {
+            Ok(packet) => packet,
+            Err(_) => continue,
+        };
+
         let mut implants = Vec::new();
 
         match packet {

