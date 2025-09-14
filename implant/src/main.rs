@@ -32,6 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let command = Command::new(command).output();
 
                     if command.is_err() {
+                        results.push(("error lol".to_string(), 1));
                         continue;
                     }
 

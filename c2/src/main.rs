@@ -128,7 +128,7 @@ fn run_admin_command(
     match packet {
         Packet::ImplantListRequest => {
             println!("The admin requested the implant list: {implants:?}");
-            // remove_old_implants(implants);
+            remove_old_implants(implants);
 
             stream.write(
                 encode(Packet::ImplantList(
