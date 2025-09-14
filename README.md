@@ -21,3 +21,7 @@ TYSE_ADDRESS=127.0.0.1:9120 cargo run
 ```
 
 Connects the dashboard to the Command and Control server running on localhost, port 9120 (the default port).
+
+## The admin console
+Upon running the dashboard, a password prompt will be created. Unless specified differently with the TYSE_PASSWORD env variable when running the C2, the default password is 'baka'.
+When connected, the dashboard will print the list of implants available. Choose one by typing the number in, and it should open a primitive shell. You can type an absolute path to an executable, and it should run it, and return the results on the next beacon ping from the implant.
