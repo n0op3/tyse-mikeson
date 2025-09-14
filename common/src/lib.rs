@@ -18,6 +18,7 @@ pub enum Packet {
     ImplantList(Vec<Implant>),
     C2Alive,
     Command { implant_id: usize, command: String },
+    ResultsRequest,
     CommandResults { results: Vec<(String, i32)> },
     CommandList { commands: Vec<String> },
 }

