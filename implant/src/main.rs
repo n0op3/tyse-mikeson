@@ -27,7 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut results = Vec::new();
                 for command in commands {
                     println!("({command})");
-                    let command = Command::new(command).output();
+                    let mut command = command.split(" ");
+                    let command = Command::new(command.nth(0).unwrap()).args(command).output();
 
                     if command.is_err() {
                         results.push(("error lol".to_string(), 1));
